@@ -1,3 +1,4 @@
+# -----------进度显示-----------
 # 是否显示检测进度（终端）
 print-progress: false
 # 进度条显示模式:
@@ -5,65 +6,62 @@ print-progress: false
 # "stage": 每个阶段完成,显示下一阶段剩余任务
 progress-mode: "auto"
 
-# 是否开启新版本更新
-# 支持启动时检查更新及定时更新任务,无缝升级新版本
-# 支持apprise API通知渠道
-# true: 自动更新; false: 不更新（仍会提醒新版本）
-update: true
-# 启动时检查更新版本
-update-on-startup: true
-# 定时检查更新
-# "0 0,9,21 * * *" 默认每天0点,9点,21点检查更新
-cron-check-update: "0 0,9,21 * * *"
-# 使用预发布版本
-prerelease: false
-# 下载新版本超时时间(分钟)(默认2分钟)
-# 如系统代理和github代理不稳定,可适当调大即可
-# 请输入整数
-update-timeout: 2
-
-# 并发线程数
-concurrent: 20
-
-# 流水线任务并发数,为0会自动设置
-# 测活任务受限于CPU和路由器芯片,占用带宽较小,可适当大一点,量力而行
-# 测速阶段占用带宽,如果要设大,建议设置total-speed-limit避免拉满带宽
-# 测速设置了最低两倍缓冲通道,通道占满会阻塞测活任务
-# 测活-测速-媒体检测并行,缓冲通道占满后会成为瓶颈
-
-# 测活阶段，建议：10-1000
-alive-concurrent: 180
-# 测速阶段，建议：4-32
-speed-concurrent: 8
-# 媒体解锁检测，建议：10-200
-media-concurrent: 80
-
-# 检查间隔(分钟)
-check-interval: 720
-# cron表达式，如果配置了此项，将忽略check-interval
+# -----------计划任务-----------
 # 支持标准cron表达式，如：
 # "0 */6 * * *" 表示每6小时的整点执行
 # "0 0 */2 * *" 表示每2天的0点执行
 # "0 0 1 * *" 表示每月1日0点执行
 # "*/30 * * * *" 表示每30分钟执行一次
 # "0 4,16 * * *" 表示每天凌晨4点和16点执行一次
-# cron-expression: "0 4,16 * * *"
+
+# cron表达式，如果正确配置此项，将忽略check-interval
+# 建议使用：0 4,16 * * *
+cron-expression: "0 4,16 * * *"
+
+# 检查间隔(分钟)
+# 建议使用 cron-expression 表达式，每天凌晨4点和16点执行一次
+# 高峰期检测意义真的不大，节点少，而且不稳定
+check-interval: 720
+
+# -----------检测参数-----------
+# 流水线任务并发数
+# 测活任务受限于CPU和路由器芯片,占用带宽较小,可适当大一点,量力而行
+# 测速阶段占用带宽,如果要设大,建议设置total-speed-limit避免拉满带宽
+# 测速设置了最低两倍缓冲通道,通道占满会阻塞测活任务
+# 测活-测速-媒体检测并行,缓冲通道占满后会成为瓶颈
+
+# 以下任意一个设为 0，将开启自动模式，检测速度将会数倍提高
+
+# 测活阶段，建议：10-1000
+alive-concurrent: 200
+# 测速阶段，建议：4-32
+speed-concurrent: 16
+# 媒体解锁检测，建议：10-200
+media-concurrent: 100
+
+# 是否启用IPv6，默认禁用
+ipv6: false
+
+# 超时时间(毫秒)(节点的最大延迟)，主要影响测活任务
+timeout: 6000
+
+# 并发线程数，用于未设置测活、测速、媒体解锁检测时，自动计算并发数的基准
+# 主要影响获取订阅任务，超过100会设置为100
+concurrent: 10
 
 # 保存几个成功的节点，为0代表不限制
 # 如果你的并发数量超过这个参数，那么成功的结果可能会大于这个数值
 # success-limit <= success <= success-limit+concurrent
-success-limit: 200
+success-limit: 100
 
-# 超时时间(毫秒)(节点的最大延迟)
-timeout: 6000
-# 测速地址(注意 并发数*节点速度<最大网速 否则测速结果不准确)
-# 尽量不要使用Speedtest，Cloudflare提供的下载链接，因为很多节点屏蔽测速网站
-# 如果找不到稳定的测速地址，可以自建测速地址
-# speed-test-url: "https://github.com/2dust/v2rayN/releases/download/7.16.2/v2rayN-windows-64-SelfContained.zip"
-# speed-test-url: "random"
-# (留空关闭测速，如节点数量少，网络环境差，请确保测速功能关闭)
-speed-test-url: ""
+# 此选项将保存并加载 {上次检测成功的节点} 和 {历次检测成功的节点}
+# 如果为true，则保留之前测试成功的节点
+# 避免因为上游链接更新，导致可用节点丢失
+# 本项目已移除未经验证的 /all.yaml /sub/all.yaml访问
+# 可放心设置CF Tunnel隧道,在外网访问、修改配置、分享订阅
+keep-success-proxies: true
 
+# -----------下载参数-----------
 # 注意: 节点可能被测速测死(暂时或永久), 经过多次测试, 不用怀疑!
 # 强烈建议设置较低的 min-speed, 强烈建议保留 download-timeout 和 download-mb
 # 最低测速结果舍弃(KB/s)
@@ -76,6 +74,16 @@ download-mb: 20
 # 限制与实际情况可能会有一定误差
 total-speed-limit: 0
 
+# 测速地址(注意 并发数*节点速度<最大网速 否则测速结果不准确)
+# 尽量不要使用Speedtest，Cloudflare提供的下载链接，因为很多节点屏蔽测速网站
+# 如果找不到稳定的测速地址，可以自建测速地址
+# speed-test-url: "https://github.com/2dust/v2rayN/releases/download/7.16.2/v2rayN-windows-64-SelfContained.zip"
+# speed-test-url: "random"
+# (留空关闭测速，如节点数量少，网络环境差，请确保测速功能关闭)
+# 建议在深夜、早上、下午等空闲时段检测，避开网络拥堵的晚高峰
+# 出口水管就那么大，运营商只能优先保障直播、影视和游戏之类的正常流量
+speed-test-url: ""
+
 # 相似度阈值(Threshold)大致对应网段
 # 1.00 /32（完全相同 IP）
 # 0.75 /24（前三段相同）
@@ -84,6 +92,29 @@ total-speed-limit: 0
 # 以下设置仅能 [减少] 节点被测速测死的概率, 无法避免被 "反代机房" 中断节点
 threshold: 0.75
 
+# 处理一定数量节点后就进行内存回收
+# 如果过低，内存降低有限，将增加 CPU 使用率
+gc-threshold: 20000
+
+# -----------版本更新-----------
+# 是否开启新版本更新
+# 支持启动时检查更新及定时更新任务,无缝升级新版本
+# 支持apprise API通知渠道
+# true: 自动更新; false: 不更新（仍会提醒新版本）
+update: true
+# 启动时检查更新版本
+update-on-startup: true
+# 定时检查更新
+# "0 9,21 * * *" 每天9点,21点检查更新
+cron-check-update: "0 9-23/2,0 * * *"
+# 使用预发布版本
+prerelease: false
+# 下载新版本超时时间(分钟)(默认2分钟)
+# 如系统代理和github代理不稳定,可适当调大即可
+# 请输入整数
+update-timeout: 5
+
+# -----------WebUI-----------
 # 监听端口，用于直接返回节点信息，方便订阅转换
 # 注意：为方便小白默认监听0.0.0.0:8199，请自行修改
 # 更新需重启程序
@@ -96,18 +127,91 @@ listen-port: ":8199"
 # 访问地址：http://127.0.0.1:8199/admin
 # 建议使用 Cloudflare Tunel隧道 映射主机端口
 # 可使用域名编辑、管理配置,开始、结束检测任务
-# 在项目地址 https://github.com/sinspired/subs-check 查看教程
+# 在项目地址 https://github.com/sinspired/subs-check-pro 查看教程
 enable-web-ui: true
 # 填写Web控制面板的api-key，如果为空，则自动生成 !请在终端窗口查看apikey
 # 配置文件为空时，支持使用环境变量设置 API_KEY
 api-key: ""
 
 # 如果你要分享订阅，请设置订阅分享密码
-# 订阅访问地址格式：http://127.0.0.1:8199/{share-password}/sub/filename.yaml
-# 文件位置放在 output/filename.yaml
-# 比如: http://127.0.0.1:8199/{share-password}/sub/all.yaml
+# 访问 http://127.0.0.1:8199/sub 验证后查看分享的订阅文件列表
+# 文件位置放在 output/sub/filename.yaml
+# 比如: http://127.0.0.1:8199/sub/{share-password}/all.yaml
 share-password: ""
 
+# -----------SUB-STORE-----------
+# sub-store的启动端口，为空则不启动sub-store
+# 更新需重启程序，不可监听局域网IP，只有三种写法 :8299, 127.0.0.1:8299, 0.0.0.0:8299
+sub-store-port: ":8299"
+# sub-store自定义访问路径，后续访问订阅要带上此路径
+# 设置path之后，可以开启订阅分享功能，无需暴露真实的path
+# 订阅示例：http://127.0.0.1:8299/{sub-store-path}/api/file/mihomo
+# WebUI 支持分享订阅，直接复制订阅链接
+# {建议设置}：首次运行如未设置将自动生成随机路径
+# sub-store-path: "/path"
+sub-store-path: ""
+
+# 覆写订阅的url，这个的作用是生成带指定规则的mihomo/clash.meta订阅链接
+# 防止网络不好，所以现在内置，依赖:8199端口
+# 内置 ACL4SSR_Online_Full 和 Sinspired_Rules_CDN.yaml
+mihomo-overwrite-url: http://127.0.0.1:8199/Sinspired_Rules_CDN.yaml
+
+# sub-store 节点操作，针对默认的 sub 订阅
+sub-process:
+  resolve-domain: false # 开启 DNS 解析（固定 Ali / IPv6 / 缓存启用）
+  node-split: false # 开启节点裂变（将多 IP 展开为独立节点）
+  sub-info: false # 注入订阅流量信息节点
+
+  # true=保留匹配节点（白名单），false=丢弃匹配节点（黑名单）
+  regex-filter-keep: true
+  # 正则筛选表达式列表
+  regex-filter:
+    # - ".*\bYT\b(?!-CN).*"
+
+  # 正则排序表达式列表，按照匹配顺序排序
+  # 正则过滤，国家、协议过滤等操作，请进入 WebUI，点 “订阅管理”操作
+  regex-sort:
+    # - ".*\bSG[¹²]\b.*"
+    # - ".*\bUS[¹²]\b.*"
+    # - "(.*GPT⁺.*)(.*GM.*)"
+    # - ".*\bGM\b.*"
+    # - ".*GPT⁺.*"
+    # - ".*\bYT\b(?!-CN).*"
+
+# singbox规则配置
+# json文件为分流规则
+# js脚本用来根据规则对节点进行处理
+# singbox每个版本规则不兼容，须根据客户端版本选择合适的规则
+# singbox 最新版
+singbox-latest:
+  version: 1.12
+  json: "https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.12.x/sing-box.json"
+  js: "https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.12.x/sing-box.js"
+
+# singbox 1.11 版本配置（iOS 兼容）
+singbox-old:
+  version: 1.11
+  json: "https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.11.x/sing-box.json"
+  js: "https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.11.x/sing-box.js"
+
+# 以下配置查看sub-store相关的教程：https://hub.docker.com/r/xream/sub-store
+# sub-store同步gist定时任务
+# 定时任务指定时将订阅/文件上传到私有 Gist. 在前端, 叫做 同步 或 同步配置.
+# 55 23 * * * 每天 23 点 55 分(避开部分机场后端每天0点定时重启)
+sub-store-sync-cron: "55 5-23/4 * * *"
+# 定时更新订阅
+# SUB_STORE_PRODUCE_CRON 在后台定时处理订阅. 格式为 0 */2 * * *,sub,sub_A;0 */3 * * *,col,col_B
+# 即每 2 小时处理一次单条订阅 sub_A，每 3 小时处理一次组合订阅 col_B。
+# subs-check-pro 默认上传的订阅名为： sub
+# 比如你有一个sub-store订阅,名称为 jichang,就可以填 0 */2 * * *,sub,sub,jichang
+sub-store-produce-cron: "0 */4 * * *,sub,sub"
+# sub-store推送服务地址
+# 例如：Bark: "SUB_STORE_PUSH_SERVICE=https://api.day.app/XXXXXXXXXXXX/[推送标题]/[推送内容]"
+# 注意：仅需修改 XXXXXXXXXXXX 为自己的 token，[推送标题]/[推送内容] 会被sub-store自动替换为对应的内容
+# 苹果 App Store 下载 Brak，APP内获取 token
+sub-store-push-service: ""
+
+# -----------节点处理-----------
 # 以节点IP查询位置重命名节点
 # 质量差的节点可能造成IP查询失败，造成整体检查速度稍微变慢，默认true
 rename-node: true
@@ -120,22 +224,32 @@ node-type:
   # - vmess
   # - vless
 
-# 是否开启流媒体检测，其中IP欺诈依赖重命名
-media-check: true
-platforms:
-  - iprisk
-  - openai
-  - gemini
-  - youtube
-  # - tiktok
-  # - netflix
-  # - disney
-  # - x
-
 # 是否丢弃无法访问 cloudflare 的节点(可正常访问Google等,默认保留,修改会导致可用节点急剧减少,且有大概率误杀)
 # true: 丢弃
 # false: 保留
 drop-bad-cf-nodes: false
+
+# 检测 isp 类型，比如: [原生|住宅]、[广播|机房]
+# 默认关闭，设置为 true 开启
+isp-check: false
+
+# 是否开启流媒体检测，其中IP欺诈依赖重命名
+media-check: true
+# 流媒体检测超时设置(s)，建议 5-10 秒
+media-check-timeout: 5
+# iprisk: 0%;
+# openai: GPT; gemini: GM; copilot: CP;
+# Youtube: YT; tiktok: TK; netflix: NF; Disney: D+
+platforms:
+  - iprisk
+  # - openai
+  # - gemini
+  # - copilot
+  - youtube
+  # - tiktok
+  # - netflix
+  # - disney
+  - x
 
 # 增强的位置显示开关,默认开启
 # 无法访问 CF 的 CF 节点: HK⁻¹
@@ -150,16 +264,6 @@ enhanced-tag: true
 # 可以指定本地数据库文件路径，如：/path/to/GeoLite2-Country.mmdb
 maxmind-db-path: ""
 
-# 输出目录
-# 如果为空，则为程序所在目录的config目录
-output-dir: ""
-
-# 此选项将保存并加载 {上次检测成功的节点} 和 {历次检测成功的节点}
-# 如果为true，则保留之前测试成功的节点，这样就不会因为上游链接更新，导致可用的节点被清除掉
-# 本项目已移除未经验证的 /all.yaml /sub/all.yaml访问
-# 可放心设置CF Tunnel隧道,在外网访问、修改配置、分享订阅
-keep-success-proxies: true
-
 # 检测完成后执行的回调脚本路径
 # 脚本将在检测完成后执行，可用于自定义通知或其他操作
 # 例如: "/path/to/your/script.sh" 或 'C:\path\to\your\script.bat'
@@ -167,13 +271,14 @@ keep-success-proxies: true
 # 注意如果使用docker，目前docker使用的alpine，只有sh，不支持bash
 callback-script: ""
 
+# -----------通知设置-----------
 # 配置通知渠道，将自动发送检测结果通知，新版本通知
-# 复制 https://vercel.com/new/clone?repository-url=https://github.com/sinspired/apprise_vercel 到浏览器
+# 访问 https://github.com/sinspired/apprise_vercel 部署通知 API 服务
 # 按提示部署，建议为 Vercel 项目设置自定义域名（国内访问 Vercel 可能受限）。
 # 填写搭建的apprise API server 地址
 # 示例：https://notify.xxxx.us.kg/notify
 # 内置apprise服务，不想搭建仅需填写 recipient-url 即可
-apprise-api-server: "https://apprised.netlib.re/notify"
+apprise-api-server: "https://apprise.linkpc.dpdns.org/notify"
 # 通知渠道
 # 支持100+ 个通知渠道，详细格式请参照 https://github.com/caronc/apprise
 # 格式参考：
@@ -181,74 +286,31 @@ apprise-api-server: "https://apprised.netlib.re/notify"
 # 钉钉格式：dingtalk://{Secret}@{ApiKey}
 # QQ邮箱：mailto://{QQ号}:{邮箱授权码}@qq.com
 # 邮箱授权码：设置-账号-POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV服务-开通-继续获取授权码
+# 访问 https://sinspired.github.io/apprise_vercel 查看设置 3分钟搞定通知渠道 教程
+# 访问 https://apprise.linkpc.dpdns.org 测试通知渠道是否正确
 recipient-url:
-  # - tgram://xxxxxx/-1002149239223
-  # - dingtalk://xxxxxx@xxxxxxx
-  # - mailto://xxxxx:xxxxxx@qq.com
+  # - "bark://api.day.app/xxxxxxxxxxxxxxx"
+  # - "ntfy://mytopic"
+  # - "tgram://xxxxxx/-1002149239223"
+  # - "dingtalk://xxxxxx@xxxxxxx"
+  # - "mailto://xxxxx:xxxxxx@qq.com"
 
 # 自定义通知标题
 notify-title: "🔔 节点状态更新"
 
-# sub-store的启动端口，为空则不启动sub-store
-# 更新需重启程序，不可监听局域网IP，只有三种写法 :8299, 127.0.0.1:8299, 0.0.0.0:8299
-sub-store-port: ":8299"
-# sub-store自定义访问路径，后续访问订阅要带上此路径
-# 设置path之后，可以开启订阅分享功能，无需暴露真实的path
-# 订阅示例：http://127.0.0.1:8299/{sub-store-path}/api/file/mihomo
-# WebUI 支持分享订阅，直接复制订阅链接
-# {建议设置}：首次运行如未设置将自动生成随机路径
-# sub-store-path: "/path"
-sub-store-path: ""
-
-# 覆写订阅的url，这个的作用是生成带指定规则的mihomo/clash.meta订阅链接
-# 防止网络不好，所以现在内置，依赖:8199端口
-mihomo-overwrite-url: http://127.0.0.1:8199/ACL4SSR_Online_Full.yaml
-
-# singbox规则配置
-# json文件为分流规则
-# js脚本用来根据规则对节点进行处理
-# singbox每个版本规则不兼容，须根据客户端版本选择合适的规则
-# singbox 最新版
-singbox-latest:
-  version: 1.12
-  json:
-    - https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.12.x/sing-box.json
-  js:
-    - https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.12.x/sing-box.js
-
-# singbox 1.11 版本配置（iOS 兼容）
-singbox-old:
-  version: 1.11
-  json:
-    - https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.11.x/sing-box.json
-  js:
-    - https://raw.githubusercontent.com/sinspired/sub-store-template/main/1.11.x/sing-box.js
-
-# 以下配置查看sub-store相关的教程：https://hub.docker.com/r/xream/sub-store
-# sub-store同步gist定时任务
-# 定时任务指定时将订阅/文件上传到私有 Gist. 在前端, 叫做 同步 或 同步配置.
-# 55 23 * * * 每天 23 点 55 分(避开部分机场后端每天0点定时重启)
-sub-store-sync-cron: "55 5-23/2 * * *"
-# 定时更新订阅
-# SUB_STORE_PRODUCE_CRON 在后台定时处理订阅. 格式为 0 */2 * * *,sub,sub_A;0 */3 * * *,col,col_B
-# 即每 2 小时处理一次单条订阅 sub_A，每 3 小时处理一次组合订阅 col_B。
-# subs-check 默认上传的订阅名为： sub
-# 比如你有一个sub-store订阅,名称为 jichang,就可以填 0 */2 * * *,sub,sub,jichang
-sub-store-produce-cron: 0 */2 * * *,sub,sub
-# sub-store推送服务地址
-# 例如：Bark: "SUB_STORE_PUSH_SERVICE=https://api.day.app/XXXXXXXXXXXX/[推送标题]/[推送内容]"
-# 注意：仅需修改 XXXXXXXXXXXX 为自己的 token，[推送标题]/[推送内容] 会被sub-store自动替换为对应的内容
-# 苹果 App Store 下载 Brak，APP内获取 token
-sub-store-push-service: ""
+# -----------存储参数-----------
+# 输出目录
+# 如果为空，则为程序所在目录的config目录
+output-dir: ""
 
 # 保存方法
 # 目前支持的保存方法: r2, local, gist, webdav, s3
-save-method: local
+save-method: "local"
 
 # webdav
-webdav-url: https://example.com/dav/
-webdav-username: admin
-webdav-password: admin
+webdav-url: "https://example.com/dav/"
+webdav-username: "admin"
+webdav-password: "admin"
 
 # gist id
 github-gist-id: ""
@@ -257,24 +319,27 @@ github-token: ""
 # github api mirror
 github-api-mirror: ""
 
-# 将测速结果推送到Worker的地址
-worker-url: https://example.worker.dev
+# r2
+# 将测速结果推送到 Cloudflare Worker的地址
+worker-url: "https://example.worker.dev"
 # Worker令牌
 worker-token: 1234567890
 
+# s3
 # 将测速结果推送到S3/Minio的地址
-s3-endpoint: 127.0.0.1:9000
+s3-endpoint: "127.0.0.1:9000"
 # S3的访问凭证
-s3-access-id: ak
-s3-secret-key: sk
+s3-access-id: "ak"
+s3-secret-key: "sk"
 # S3的Bucket名称
-s3-bucket: public
+s3-bucket: "public"
 # 是否使用SSL
 s3-use-ssl: false
 # 默认自动判断dns还是path，但一些云厂商不遵循规范，所以有时需要手动设置
 # 可选值：auto, path, dns
-s3-bucket-lookup: auto
+s3-bucket-lookup: "auto"
 
+# -----------代理环境-----------
 # 优先级 1.system-proxy;2.github-proxy;3.ghproxy-group
 # 即使未设置,也会检测常见端口(v2ray\clash)的系统代理自动设置
 
@@ -283,66 +348,73 @@ s3-bucket-lookup: auto
 # system-proxy: "http://username:password@192.168.1.1:7890"
 # system-proxy: "socks5://username:password@192.168.1.1:7890"
 # system-proxy: "http://127.0.0.1:10808"
-system-proxy: "http://enabling:Y5gF8pN1@47.239.109.99:3128"
+system-proxy: ""
 # Github 代理：获取订阅使用
 # github-proxy: "https://ghfast.top/"
-github-proxy: "https://github.dpik.top/"
+github-proxy: ""
 # GitHub 代理列表：程序会自动筛选可用的 GitHub 代理
 ghproxy-group:
-  - https://gh.518298.xyz/
-  - https://b.yesican.top/
-  - https://ghproxy.053000.xyz/
-  - https://github.xiongmx.com/
-  - https://proxy.fakups.cn/
-  - https://ccgit2.5gyh.cf/
-  - https://github.9394961.xyz/
-  - https://ghp.opendatahub.xyz/
+  - https://gh.b52m.cn/
+  - https://github.180280.xyz/
+  - https://hk.gh-proxy.org/
+  - https://git.maomao.ovh/
+  - https://cdn.gh-proxy.org/
+  - https://v6.gh-proxy.org/
+  - https://github.sssss.work/
+  - https://gh.dev.438250.xyz/
   - https://git.llvho.com/
-  - https://privateghproxy.iil.im/
-  - https://gh.mtx72.cc/
+  - https://gh.oevery.me/
+  - https://github.dpik.top/
   - https://g.108964.xyz/
-  - https://git.loushi.site/
-  - https://ghproxy.gopher.ink/
-  - https://gh.tou.lu/
-  - https://gh.aurzex.top/
+  - https://down.avi.gs/
+  - https://git.1999111.xyz/
+  - https://github.732086.xyz/
+  - https://gh-proxy.org/
+  - https://gh.8p.gs/
+  - https://git.repcz.link/
+  - https://proxydl.lcayun.cn/
+  - https://edgeone.gh-proxy.org/
+  - https://gh.xda.plus/
 
+# -----------获取订阅-----------
 # 重试次数(获取订阅失败后重试次数)
 sub-urls-retry: 3
 # 网络实在太差，就调高一点，比如 15
 sub-urls-timeout: 10
+# 订阅成功率提醒阈值
+# 低于此值会将订阅链接打印出来，用于排查质量差的订阅，使用小于1的小数，比如：0.001
+success-rate: 0
+
 # 远程订阅清单地址；用于集中维护多个订阅链接，避免频繁修改本地文件
 # 支持两种格式：
 # 1) 纯文本：按行分隔，支持 # 注释与空行
 # 2) YAML/JSON：字符串数组 ["https://...", "https://..."]
 # 支持时间占位符与 github-proxy，例如包含 {Ymd}、{Y}-{m}-{d}
+# {mm}/{dd} 指定日期格式 "01/02"，{m}/{d} 指定日期格式 "1/2"
+# 支持mihomo proxy-providers格式
 sub-urls-remote:
-  # - https://example.com/sub-list.txt
-  # - https://example.com/sub-list.yaml
-  # - https://raw.githubusercontent.com/beck-8/sub-urls/main/%E5%B0%8F%E8%80%8C%E7%BE%8E.txt
-  # - http://localhost:8199/more/extra.txt
-  - https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/col.txt
-  - https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/cm.txt
-  - https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/scan.txt
-
-# 符合条件节点数量的占比，低于此值会将订阅链接打印出来，用于排查质量差的订阅
-success-rate: 0
-# 统计订阅链接有效性和成功率
-# 为 true 会在output\stats生成订阅链接统计文件
-sub-urls-stats: false
+  # - "https://example.com/sub-list.txt"
+  # - "https://example.com/sub-list.yaml"
+  # - "https://raw.githubusercontent.com/beck-8/sub-urls/main/%E5%B0%8F%E8%80%8C%E7%BE%8E.txt"
+  # - "http://localhost:8199/more/extra.txt"
+  - "https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/col.txt"
+  - "https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/cm.txt"
+  - "https://raw.githubusercontent.com/sinspired/airport/main/subs/merged/scan.txt"
 
 # 订阅地址 支持 clash/mihomo/v2ray/base64 格式的订阅链接
 # 如果用户想明确使用clash类型，那可以在支持的订阅链接结尾加上 &flag=clash.meta
 # github 链接可自己添加ghproxy使用；订阅链接支持 HTTP_PROXY HTTPS_PROXY 环境变量加速拉取
 # 如果用户想区分节点来源，可在订阅链接结尾加上 #备注 ，备注字段会自动加到节点命名结尾
-# 支持时间占位符，例如包含 {Ymd}、{Y}-{m}-{d}
+# 支持日期占位符，例如包含 {Ymd}、{ymd}、{y-m-d}、{y_m_d} 指定日期格式 “20060102”...
+# {mm}/{dd} 指定日期格式 "01/02"，{m}/{d} 指定日期格式 "1/2"
 sub-urls:
-  # - https://example.com/sub.txt
-  # - https://example.com/sub2.txt
-  # - https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a
-  # - https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a?flag=clash.meta
-  # - https://raw.githubusercontent.com/example/repo/main/config/{Ymd}.yaml
-  # - https://raw.githubusercontent.com/example/repo/main/daily/daily-{Y}-{m}-{d}.yaml
-  # - https://example.com/sub.txt#我是备注
+  # - "https://example.com/sub.txt"
+  # - "https://example.com/sub2.txt"
+  # - "https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a"
+  # - "https://example.com/sub?token=43fa8f0dc9bb00dcfec2afb21b14378a?flag=clash.meta"
+  # - "https://raw.githubusercontent.com/example/repo/main/config/{Ymd}.yaml"
+  # - "https://raw.githubusercontent.com/example/repo/main/daily/daily-{Y}-{mm}-{d}.yaml"
+  # - "https://example.com/sub.txt#我是备注"
   - "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub1.txt"
   - "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub2.txt"
   - "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://raw.githubusercontent.com/barry-far/V2ray-config/main/Sub3.txt"
