@@ -4,7 +4,7 @@
 
 > **注意:** 本工具会自动更新 [Subs-Check-Pro](https://github.com/sinspired/subs-check-pro) 的 `config.yaml` 文件。首次使用时:
 >
-> 1. 将 Subs-Check 的 [config.yaml](https://github.com/sinspired/subs-check-pro/blob/main/config/config.example.yaml) 文件拷贝到本工具目录下,或
+> 1. 将 Subs-Check-Pro 的 [config.yaml](https://github.com/sinspired/subs-check-pro/blob/main/config/config.example.yaml) 文件拷贝到本工具目录下,或
 > 2. 使用本工具提供的 `config.yaml.example` 复制为 `config.yaml`
 
 ## ✨ 特性
