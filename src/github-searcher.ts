@@ -137,7 +137,7 @@ export class GitHubSearcher {
     }
 
     console.log(`✅ [Code Search] 共发现 ${allRepos.length} 个仓库`);
-    return allRepos.slice(0, maxResults);
+    return allRepos;
   }
 
   // 策略3: GitHub Topics 搜索
@@ -163,7 +163,7 @@ export class GitHubSearcher {
     }
 
     console.log(`✅ [Topics] 共发现 ${allRepos.length} 个仓库`);
-    return allRepos.slice(0, maxResults);
+    return allRepos;
   }
 
   // 策略4: 已知聚合仓库（种子源）
