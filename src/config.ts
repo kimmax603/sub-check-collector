@@ -46,8 +46,9 @@ function parseKeywordGroups(envValue?: string): string[][] {
 }
 
 export function loadConfig(): Config {
+  const token = process.env.GITHUB_TOKEN?.trim();
   return {
-    githubToken: process.env.GITHUB_TOKEN,
+    githubToken: token || undefined,
     searchKeywords: process.env.SEARCH_KEYWORDS?.split(',').filter(Boolean) || DEFAULT_CONFIG.searchKeywords,
     keywordGroups: parseKeywordGroups(process.env.KEYWORD_GROUPS),
     scheduleInterval: process.env.SCHEDULE_INTERVAL || DEFAULT_CONFIG.scheduleInterval,

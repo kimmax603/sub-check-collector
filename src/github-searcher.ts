@@ -15,7 +15,7 @@ export class GitHubSearcher {
 
   constructor(token?: string) {
     this.octokit = new Octokit(
-      token && token.trim() ? { auth: token } : {}
+      token && token.trim() ? { auth: token.trim() } : {}
     );
   }
 
