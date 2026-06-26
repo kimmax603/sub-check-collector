@@ -250,16 +250,22 @@ export class GitHubSearcher {
       filtered = filtered.filter(repo => repo.stars >= minStars);
     }
 
+    // 先按 updated_at 排序（GitHub 搜索返回的时间）
+    filtered.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    // 只验证候选池（5 倍缓冲），避免验证大量不会入选的仓库
+    const candidatePool = filtered.slice(0, Math.min(maxRepositories * 5, filtered.length));
+
     // 用 GitHub API 验证实际最后提交时间
     if (maxDaysSinceUpdate) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - maxDaysSinceUpdate);
-      const before = filtered.length;
+      const before = candidatePool.length;
 
-      console.log(`   🔍 验证 ${filtered.length} 个仓库的实际提交时间...`);
+      console.log(`   🔍 验证 ${candidatePool.length} 个候选仓库的实际提交时间（共 ${filtered.length} 个）...`);
 
       const verifiedRepos: Repository[] = [];
-      for (const repo of filtered) {
+      for (const repo of candidatePool) {
         const lastCommit = await this.getLastCommitDate(repo.fullName);
         if (lastCommit) {
           // API 成功，用实际提交时间判断

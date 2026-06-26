@@ -111,7 +111,7 @@ export class SubscriptionCollector {
             }
           }
 
-          await this.delay(1000);
+          await this.delay(500);
         } catch (error) {
           console.error(`⚠️  处理 ${repo.fullName} 时出错:`, error);
           continue;
