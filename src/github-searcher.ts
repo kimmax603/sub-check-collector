@@ -265,20 +265,37 @@ export class GitHubSearcher {
       console.log(`   🔍 验证 ${candidatePool.length} 个候选仓库的实际提交时间（共 ${filtered.length} 个）...`);
 
       const verifiedRepos: Repository[] = [];
-      for (const repo of candidatePool) {
-        const lastCommit = await this.getLastCommitDate(repo.fullName);
-        if (lastCommit) {
-          // API 成功，用实际提交时间判断
-          if (lastCommit >= cutoffDate) {
-            repo.updatedAt = lastCommit;
+      const CONCURRENCY = 10; // 验证并发数
+      let completed = 0;
+
+      // 批量并发验证
+      for (let i = 0; i < candidatePool.length; i += CONCURRENCY) {
+        const batch = candidatePool.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(repo => this.getLastCommitDate(repo.fullName))
+        );
+
+        // 处理结果
+        for (let j = 0; j < batch.length; j++) {
+          const repo = batch[j];
+          const lastCommit = results[j];
+
+          if (lastCommit) {
+            if (lastCommit >= cutoffDate) {
+              repo.updatedAt = lastCommit;
+              verifiedRepos.push(repo);
+            }
+          } else {
+            // API 失败，保留仓库（不误杀）
             verifiedRepos.push(repo);
           }
-        } else {
-          // API 失败，保留仓库（不误杀）
-          verifiedRepos.push(repo);
         }
-        await this.delay(100);
+
+        completed += batch.length;
+        // 显示进度
+        process.stdout.write(`\r   ⏳ 进度: ${completed}/${candidatePool.length}`);
       }
+      console.log(''); // 换行
 
       filtered = verifiedRepos;
       const filteredCount = before - filtered.length;

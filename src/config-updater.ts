@@ -22,45 +22,21 @@ export class ConfigUpdater {
     try {
       console.log('\n📝 开始更新 config.yaml...');
 
-      // 1. 读取现有配置文件
       const fileContent = await fs.readFile(this.configPath, 'utf-8');
 
-      // 2. 解析 YAML (保留注释)
       const config = yaml.load(fileContent) as any;
-
       if (!config) {
         throw new Error('配置文件解析失败');
       }
 
-      // 3. 提取所有有效的订阅链接 URL
+      const oldCount = (config['sub-urls'] || []).length;
       const newUrls = this.extractValidUrls(links);
 
-      // 4. 获取现有的 sub-urls 并清理非法 URL
-      const rawExisting = config['sub-urls'] || [];
-      const existingUrls = new Set<string>(rawExisting.map((url: string) => this.normalizeUrl(url)));
-      const beforeCount = existingUrls.size;
-      for (const url of existingUrls) {
-        if (this.isNonSubscriptionUrl(url)) {
-          existingUrls.delete(url);
-        }
-      }
-      if (existingUrls.size < beforeCount) {
-        console.log(`   🗑️  清理了 ${beforeCount - existingUrls.size} 个非法 URL`);
-      }
-
-      // 5. 合并链接(去重)
-      const mergedUrls = this.mergeUrls(existingUrls, newUrls);
-
-      // 6. 更新配置
-      config['sub-urls'] = Array.from(mergedUrls);
-
-      // 7. 保留注释的方式写回文件
-      await this.writeConfigWithComments(fileContent, mergedUrls);
+      await this.writeConfigWithComments(fileContent, newUrls);
 
       console.log(`✅ 配置文件已更新`);
-      console.log(`   - 原有链接: ${existingUrls.size} 个`);
-      console.log(`   - 新增链接: ${mergedUrls.size - existingUrls.size} 个`);
-      console.log(`   - 总计链接: ${mergedUrls.size} 个\n`);
+      console.log(`   - 旧链接: ${oldCount} 个 (已清除)`);
+      console.log(`   - 新链接: ${newUrls.size} 个\n`);
     } catch (error) {
       console.error('❌ 更新配置文件失败:', error);
       throw error;
@@ -68,12 +44,14 @@ export class ConfigUpdater {
   }
 
   /**
-   * 从订阅链接中提取有效的 URL
+   * 从订阅链接中提取有效的 URL（按节点数降序排序）
    */
   private extractValidUrls(links: SubscriptionLink[]): Set<string> {
-    const urls = new Set<string>();
+    // 按节点数降序排序，节点数越多越靠前
+    const sortedLinks = [...links].sort((a, b) => (b.nodeCount ?? 0) - (a.nodeCount ?? 0));
 
-    for (const link of links) {
+    const urls = new Set<string>();
+    for (const link of sortedLinks) {
       const url = link.url;
 
       // 排除非订阅 URL
@@ -121,18 +99,19 @@ export class ConfigUpdater {
 
   /**
    * 规范化 URL，用于去重
+   * - host 转小写（防止同一网站大小写不同）
+   * - 路径保持原始大小写（GitHub 路径区分大小写！）
    */
   private normalizeUrl(url: string): string {
     let normalized = url
-      .toLowerCase()
       .replace(/[|`'"'\)>]+$/, '')
       .replace(/\/+$/, '')
       .replace(/^http:/, 'https:');
 
-    // 去除 query 和 fragment
+    // 去除 query 和 fragment，保持路径原始大小写
     try {
       const u = new URL(normalized);
-      normalized = u.origin + u.pathname;
+      normalized = `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
     } catch {
       normalized = normalized.replace(/[?#].*$/, '');
     }
@@ -181,86 +160,49 @@ export class ConfigUpdater {
     ].some(p => p.test(lower));
   }
 
-  /**
-   * 合并新旧链接
-   */
-  private mergeUrls(existingUrls: Set<string>, newUrls: Set<string>): Set<string> {
-    const merged = new Set<string>(existingUrls);
-
-    // 添加新链接
-    for (const url of newUrls) {
-      merged.add(url);
-    }
-
-    return merged;
-  }
-
-  /**
-   * 保留注释的方式写回配置文件
-   * 使用正则表达式替换 sub-urls 部分,保留注释
-   */
   private async writeConfigWithComments(
     originalContent: string,
     newUrls: Set<string>
   ): Promise<void> {
-    // 构建新的 sub-urls 部分
-    const urlsLines = Array.from(newUrls)
-      .sort() // 排序
+    const urlsBlock = Array.from(newUrls)
+      .sort()
       .map((url) => `  - "${url}"`)
       .join('\n');
 
-    // 改进的正则表达式:
-    // 1. 匹配 sub-urls: 前面的所有注释行 (# 开头的行)
-    // 2. 匹配 sub-urls: 这一行
-    // 3. 匹配所有以空格或tab开头的内容行(包括注释的示例链接)
-    // 但只替换非注释的链接部分
-
+    // 找到 sub-urls: 所在行（排除注释行）
     const lines = originalContent.split('\n');
-    const newLines: string[] = [];
-    let inSubUrls = false;
-    let subUrlsStartIndex = -1;
-
+    let subUrlsStart = -1;
     for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === 'sub-urls:' && !lines[i].startsWith('#')) {
+        subUrlsStart = i;
+        break;
+      }
+    }
+    if (subUrlsStart === -1) {
+      throw new Error('未找到 sub-urls: 配置项');
+    }
+
+    // 从 sub-urls: 下一行开始，找到下一个顶级配置项的行号
+    let subUrlsEnd = lines.length;
+    for (let i = subUrlsStart + 1; i < lines.length; i++) {
       const line = lines[i];
-
-      // 检测 sub-urls: 这一行 (排除注释行)
-      if (line.trim() === 'sub-urls:' && !line.trim().startsWith('#')) {
-        inSubUrls = true;
-        subUrlsStartIndex = newLines.length;
-        newLines.push(line);
-        continue;
-      }
-
-      // 如果在 sub-urls 部分
-      if (inSubUrls) {
-        // 检查是否到达下一个顶级配置项(不以空格/tab/# 开头的行)
-        if (line.length > 0 && !line.match(/^[\s#]/)) {
-          // 遇到下一个配置项,退出 sub-urls 部分
-          inSubUrls = false;
-          // 在这里插入新的 URLs
-          newLines.push(urlsLines);
-          newLines.push(line);
-        } else {
-          // 保留注释行和空行,忽略实际的URL行
-          if (line.trim().startsWith('#') || line.trim() === '') {
-            newLines.push(line);
-          }
-          // 忽略旧的URL行(以 - 开头)
-        }
-      } else {
-        newLines.push(line);
+      // 顶级配置项：非空、不以空格/tab开头、不是注释
+      if (line.length > 0 && !/^[ \t]/.test(line) && !line.startsWith('#')) {
+        subUrlsEnd = i;
+        break;
       }
     }
 
-    // 如果文件末尾就是 sub-urls 部分,添加 URLs
-    if (inSubUrls) {
-      newLines.push(urlsLines);
-    }
+    // 保留 sub-urls: 之前的全部内容 + sub-urls: 行本身 + 旧区块中的注释/空行 + 新URL + 后续全部内容
+    const before = lines.slice(0, subUrlsStart + 1);
+    const after = lines.slice(subUrlsEnd);
 
-    const updatedContent = newLines.join('\n');
+    // 从旧区块中只保留注释行和空行
+    const oldSection = lines.slice(subUrlsStart + 1, subUrlsEnd);
+    const keptLines = oldSection.filter(l => l.trim() === '' || l.trim().startsWith('#'));
 
-    // 写回文件
-    await fs.writeFile(this.configPath, updatedContent, 'utf-8');
+    const result = [...before, ...keptLines, urlsBlock, ...after].join('\n');
+    await fs.writeFile(this.configPath, result, 'utf-8');
   }
 
   /**

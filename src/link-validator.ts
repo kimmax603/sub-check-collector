@@ -49,38 +49,14 @@ export class LinkValidator {
     if (!this.octokit) return null;
 
     try {
-      // 解析 URL，支持两种格式:
-      // https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}
-      // https://raw.githubusercontent.com/{owner}/{repo}/refs/heads/{branch}/{path}
-      const match = url.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(.+)/);
-      if (!match) return null;
-
-      const [, owner, repo, rest] = match;
-      let branch: string;
-      let filePath: string;
-
-      if (rest.startsWith('refs/')) {
-        // 格式: refs/heads/feature/my-branch/path/to/file.txt
-        // 找到 refs/heads/ 后第一个 / 的位置来分割 branch 和 path
-        const refsPrefix = 'refs/heads/';
-        const afterRefs = rest.substring(refsPrefix.length);
-        const slashIndex = afterRefs.indexOf('/');
-        if (slashIndex === -1) return null;
-        branch = refsPrefix + afterRefs.substring(0, slashIndex);
-        filePath = afterRefs.substring(slashIndex + 1);
-      } else {
-        // 格式: main/path/to/file.txt
-        const slashIndex = rest.indexOf('/');
-        if (slashIndex === -1) return null;
-        branch = rest.substring(0, slashIndex);
-        filePath = rest.substring(slashIndex + 1);
-      }
+      const parsed = this.parseGitHubUrl(url);
+      if (!parsed) return null;
 
       const commits = await this.octokit.rest.repos.listCommits({
-        owner,
-        repo,
-        path: filePath,
-        sha: branch,
+        owner: parsed.owner,
+        repo: parsed.repo,
+        path: parsed.filePath,
+        sha: parsed.branch,
         per_page: 1,
       });
 
@@ -93,28 +69,172 @@ export class LinkValidator {
     }
   }
 
-  private isContentValid(content: string): boolean {
-    if (!content || content.trim().length === 0) return false;
+  /**
+   * 通过 GitHub API 验证文件是否存在
+   * 返回 true 表示文件存在，false 表示不存在
+   */
+  private async checkFileExistsViaApi(url: string): Promise<boolean> {
+    if (!this.octokit) return true;
+
+    try {
+      const parsed = this.parseGitHubUrl(url);
+      if (!parsed) return true;
+
+      await this.octokit.rest.repos.getContent({
+        owner: parsed.owner,
+        repo: parsed.repo,
+        path: parsed.filePath,
+        ref: parsed.branch,
+      });
+      return true;
+    } catch (err: any) {
+      if (err?.status === 404) return false;
+      return true;
+    }
+  }
+
+  /**
+   * 通过 GitHub API 同时验证文件存在性和内容有效性，返回节点数
+   */
+  private async validateViaGitHubApi(url: string): Promise<{ exists: boolean; nodeCount: number }> {
+    if (!this.octokit) return { exists: true, nodeCount: 0 };
+
+    try {
+      const parsed = this.parseGitHubUrl(url);
+      if (!parsed) return { exists: true, nodeCount: 0 };
+
+      const response = await this.octokit.rest.repos.getContent({
+        owner: parsed.owner,
+        repo: parsed.repo,
+        path: parsed.filePath,
+        ref: parsed.branch,
+      });
+
+      if (Array.isArray(response.data) || response.data.type !== 'file') {
+        return { exists: true, nodeCount: 0 };
+      }
+
+      const content = Buffer.from(response.data.content, 'base64').toString('utf-8');
+      const nodeCount = this.countValidNodes(content);
+      return { exists: true, nodeCount };
+    } catch (err: any) {
+      if (err?.status === 404) return { exists: false, nodeCount: 0 };
+      return { exists: true, nodeCount: 0 };
+    }
+  }
+
+  private parseGitHubUrl(url: string): { owner: string; repo: string; branch: string; filePath: string } | null {
+    const match = url.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(.+)/);
+    if (!match) return null;
+
+    const [, owner, repo, rest] = match;
+    let branch: string;
+    let filePath: string;
+
+    if (rest.startsWith('refs/')) {
+      const refsPrefix = 'refs/heads/';
+      const afterRefs = rest.substring(refsPrefix.length);
+      const slashIndex = afterRefs.indexOf('/');
+      if (slashIndex === -1) return null;
+      branch = refsPrefix + afterRefs.substring(0, slashIndex);
+      filePath = afterRefs.substring(slashIndex + 1);
+    } else {
+      const slashIndex = rest.indexOf('/');
+      if (slashIndex === -1) return null;
+      branch = rest.substring(0, slashIndex);
+      filePath = rest.substring(slashIndex + 1);
+    }
+
+    return { owner, repo, branch, filePath };
+  }
+
+  /**
+   * 解析订阅内容，返回有效节点数量
+   * 学习 subs-check-pro 的验证逻辑：真正解析节点并校验字段
+   */
+  private countValidNodes(content: string): number {
+    if (!content || content.trim().length === 0) return 0;
 
     const text = content.trim();
+    let nodes: string[] = [];
 
-    // 检查是否为有效的 base64 编码订阅（整个内容是 base64）
-    if (this.isValidBase64Subscription(text)) return true;
+    // 1. 尝试 Base64 解码
+    const base64Regex = /^[A-Za-z0-9+/=\s]+$/;
+    if (base64Regex.test(text)) {
+      const cleaned = text.replace(/\s/g, '');
+      if (cleaned.length >= 20) {
+        try {
+          const decoded = Buffer.from(cleaned, 'base64').toString('utf-8');
+          if (decoded.includes('://')) {
+            nodes = decoded.split('\n').filter(l => l.trim().length > 0);
+          }
+        } catch {}
+      }
+    }
 
-    // 检查明文协议前缀
-    const validPatterns = [
-      /vmess:\/\//i,
-      /vless:\/\//i,
-      /trojan:\/\//i,
-      /ss:\/\//i,
-      /ssr:\/\//i,
-      /hysteria:\/\//i,
-      /tuic:\/\//i,
-      /wg:\/\//i,
-      /wireguard:\/\//i,
-    ];
+    // 2. 如果 Base64 没出结果，按行解析
+    if (nodes.length === 0) {
+      nodes = text.split('\n').filter(l => l.trim().length > 0);
+    }
 
-    return validPatterns.some(p => p.test(text));
+    // 3. 解析 Clash/Mihomo YAML 格式 (proxies 数组)
+    if (nodes.length === 0 || text.includes('proxies:')) {
+      try {
+        const yamlMatch = text.match(/proxies:\s*\n([\s\S]*?)(?=\n[a-zA-Z]|\z)/);
+        if (yamlMatch) {
+          const proxyBlock = yamlMatch[1];
+          const proxyEntries = proxyBlock.split(/\n(?=- name:)/);
+          let yamlCount = 0;
+          for (const entry of proxyEntries) {
+            const nameMatch = entry.match(/- name:\s*(.+)/);
+            const typeMatch = entry.match(/type:\s*(\w+)/);
+            const serverMatch = entry.match(/server:\s*(.+)/);
+            const portMatch = entry.match(/port:\s*(\d+)/);
+            if (nameMatch && typeMatch && serverMatch && portMatch) {
+              const port = parseInt(portMatch[1]);
+              if (port > 0 && port <= 65535) yamlCount++;
+            }
+          }
+          if (yamlCount > 0) return yamlCount;
+        }
+      } catch {}
+    }
+
+    // 4. 统计有效的协议链接
+    const protocolRegex = /^(vmess|vless|trojan|ss|ssr|hysteria|tuic|wg|wireguard):\/\//i;
+    let validCount = 0;
+
+    for (const line of nodes) {
+      const trimmed = line.trim();
+      if (!protocolRegex.test(trimmed)) continue;
+
+      // 提取 server 和 port 进行校验
+      try {
+        if (trimmed.toLowerCase().startsWith('vmess://')) {
+          const decoded = Buffer.from(trimmed.slice(8), 'base64').toString('utf-8');
+          const obj = JSON.parse(decoded);
+          if (obj.server && obj.port && obj.port > 0 && obj.port <= 65535) validCount++;
+        } else {
+          // vless://, trojan://, ss:// 等格式：从 URL 中提取 host:port
+          const urlPart = trimmed.split('://')[1] || '';
+          const atIndex = urlPart.indexOf('@');
+          if (atIndex > 0) {
+            const hostPort = urlPart.slice(atIndex + 1).split(/[/?#]/)[0];
+            const colonIdx = hostPort.lastIndexOf(':');
+            if (colonIdx > 0) {
+              const port = parseInt(hostPort.slice(colonIdx + 1));
+              if (port > 0 && port <= 65535) validCount++;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return validCount;
+  }
+
+  private isContentValid(content: string): boolean {
+    return this.countValidNodes(content) > 0;
   }
 
   private isValidBase64Subscription(text: string): boolean {
@@ -179,6 +299,19 @@ export class LinkValidator {
         return { link, isValid: false, isExpired: false, error: `HTTP ${response.status}` };
       }
 
+      // 对 raw.githubusercontent.com 用 GitHub API 验证文件内容和节点数
+      let nodeCount = 0;
+      if (link.url.includes('raw.githubusercontent.com') && this.proxyUrl) {
+        const apiResult = await this.validateViaGitHubApi(link.url);
+        if (!apiResult.exists) {
+          return { link, isValid: false, isExpired: false, error: '文件不存在(API 404)' };
+        }
+        nodeCount = apiResult.nodeCount;
+        if (nodeCount === 0) {
+          return { link, isValid: false, isExpired: false, error: '无有效节点' };
+        }
+      }
+
       // 检查新鲜度
       // 优先级: GitHub API 文件提交时间 > HTTP Last-Modified > 默认不认为过期
       const maxDays = this.maxDaysSinceSubUpdate ?? 30;
@@ -202,12 +335,18 @@ export class LinkValidator {
         }
       }
 
-      // 校验内容有效性
+      // 校验内容有效性并统计节点数
       const content = typeof response.data === 'string' ? response.data : '';
-      const isValid = this.isContentValid(content);
+      if (nodeCount === 0) {
+        nodeCount = this.countValidNodes(content);
+      }
+      const isValid = nodeCount > 0;
 
       return {
-        link,
+        link: {
+          ...link,
+          nodeCount,
+        },
         isValid,
         isExpired,
         error: isValid ? undefined : '内容无效',
@@ -291,6 +430,22 @@ export class LinkValidator {
     }
     console.log(`   📈 有效率: ${((validLinks.length / links.length) * 100).toFixed(1)}%`);
     console.log(`   ⏱️  总耗时: ${elapsed}s\n`);
+
+    // 节点数量统计
+    const nodeStats = validLinks
+      .filter(l => l.nodeCount !== undefined && l.nodeCount > 0)
+      .map(l => l.nodeCount!);
+    if (nodeStats.length > 0) {
+      const totalNodes = nodeStats.reduce((sum, n) => sum + n, 0);
+      const avgNodes = Math.round(totalNodes / nodeStats.length);
+      const maxNodes = Math.max(...nodeStats);
+      const minNodes = Math.min(...nodeStats);
+      console.log(`📊 节点数量统计:`);
+      console.log(`   📈 总节点数: ${totalNodes} 个`);
+      console.log(`   📊 平均节点: ${avgNodes} 个/链接`);
+      console.log(`   🔝 最多节点: ${maxNodes} 个`);
+      console.log(`   🔻 最少节点: ${minNodes} 个\n`);
+    }
 
     const errorResults = results.filter((r) => !r.isValid && !r.isExpired && r.error);
     if (errorResults.length > 0) {

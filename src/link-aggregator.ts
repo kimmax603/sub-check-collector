@@ -8,15 +8,15 @@ export class LinkAggregator {
 
   private normalizeUrl(url: string): string {
     let normalized = url
-      .toLowerCase()
       .replace(/[|`'"'\)>]+$/, '')
       .replace(/\/+$/, '')
       .replace(/^http:/, 'https:');
 
-    // 去除 query 和 fragment
+    // 去除 query 和 fragment，并保持路径原始大小写
     try {
       const u = new URL(normalized);
-      normalized = u.origin + u.pathname;
+      // 只对 host 转小写，路径保持原始大小写（GitHub 路径区分大小写！）
+      normalized = `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
     } catch {
       normalized = normalized.replace(/[?#].*$/, '');
     }
@@ -78,7 +78,15 @@ export class LinkAggregator {
     }
 
     for (const type in grouped) {
-      grouped[type].sort((a, b) => b.foundAt.getTime() - a.foundAt.getTime());
+      // 按节点数量降序排列，节点数相同则按发现时间降序
+      grouped[type].sort((a, b) => {
+        const nodeCountA = a.nodeCount ?? 0;
+        const nodeCountB = b.nodeCount ?? 0;
+        if (nodeCountB !== nodeCountA) {
+          return nodeCountB - nodeCountA;
+        }
+        return b.foundAt.getTime() - a.foundAt.getTime();
+      });
     }
 
     return grouped;
@@ -103,7 +111,7 @@ export class LinkAggregator {
   }
 
   async saveToFile(filePath: string): Promise<void> {
-    const grouped = this.getGroupedLinks();
+    const links = this.getAllLinksSorted();
     const stats = this.getStats();
 
     let content = '# V2Ray/Clash 订阅链接汇总\n\n';
@@ -116,28 +124,29 @@ export class LinkAggregator {
     }
     content += '\n---\n\n';
 
-    for (const [type, links] of Object.entries(grouped)) {
-      content += `## ${type}\n\n`;
+    // 按节点数降序排列显示所有链接
+    content += '## 📎 订阅链接（按节点数降序）\n\n';
 
-      for (const link of links) {
-        content += `### ${link.source}\n\n`;
-        if (link.description) {
-          content += `**说明:** ${link.description}\n\n`;
-        }
-        content += `**链接:** ${link.url}\n\n`;
-        content += `*发现时间: ${link.foundAt.toLocaleString('zh-CN')}*\n\n`;
-        content += '---\n\n';
+    for (const link of links) {
+      const nodeCount = link.nodeCount !== undefined ? link.nodeCount : 0;
+      const nodeInfo = nodeCount > 0 ? ` [${nodeCount}节点]` : '';
+
+      content += `### ${link.source}${nodeInfo}\n\n`;
+      if (link.description) {
+        content += `**说明:** ${link.description}\n\n`;
       }
+      content += `**链接:** ${link.url}\n\n`;
+      content += `*发现时间: ${link.foundAt.toLocaleString('zh-CN')}*\n\n`;
+      content += '---\n\n';
     }
 
-    // 附录: 排序后的纯链接列表
-    const sortedUrls = Array.from(this.links.values())
-      .map(l => l.url)
-      .sort();
-    content += '## 📎 纯链接列表\n\n';
+    // 附录: 纯链接列表（按节点数降序）
+    content += '## 📋 纯链接列表（按节点数降序）\n\n';
     content += '```\n';
-    for (const url of sortedUrls) {
-      content += url + '\n';
+    for (const link of links) {
+      const nodeCount = link.nodeCount !== undefined ? link.nodeCount : 0;
+      const nodeInfo = nodeCount > 0 ? ` [${nodeCount}节点]` : '';
+      content += `${link.url}${nodeInfo}\n`;
     }
     content += '```\n';
 
@@ -160,6 +169,21 @@ export class LinkAggregator {
     await fs.writeFile(tmpPath, content, 'utf-8');
     await fs.rename(tmpPath, filePath);
     console.log(`💾 已保存到: ${filePath}`);
+  }
+
+  /**
+   * 获取所有链接（按节点数降序排列）
+   */
+  getAllLinksSorted(): SubscriptionLink[] {
+    return Array.from(this.links.values())
+      .sort((a, b) => {
+        const nodeCountA = a.nodeCount ?? 0;
+        const nodeCountB = b.nodeCount ?? 0;
+        if (nodeCountB !== nodeCountA) {
+          return nodeCountB - nodeCountA;
+        }
+        return b.foundAt.getTime() - a.foundAt.getTime();
+      });
   }
 
   async loadFromFile(filePath: string): Promise<void> {

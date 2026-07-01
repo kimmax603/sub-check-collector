@@ -7,6 +7,7 @@ export interface SubscriptionLink {
   source: string; // 来源仓库
   description?: string; // 链接描述
   foundAt: Date; // 发现时间
+  nodeCount?: number; // 节点数量（验证时填充）
 }
 
 /**
@@ -36,6 +37,7 @@ export interface Config {
   validateLinks?: boolean;
   linkValidationTimeout?: number;
   linkValidationConcurrency?: number;
+  repoProcessingConcurrency?: number; // 仓库处理并发数 (默认5)
   proxyUrl?: string;
   maxDaysSinceSubUpdate?: number;
   exploreFileTree?: boolean; // 是否遍历仓库根目录查找订阅文件

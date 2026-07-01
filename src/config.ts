@@ -26,6 +26,7 @@ export const DEFAULT_CONFIG: Config = {
   validateLinks: false,
   linkValidationTimeout: 10000,
   linkValidationConcurrency: 10,
+  repoProcessingConcurrency: 5, // 仓库处理并发数，默认5
   proxyUrl: undefined,
   maxDaysSinceSubUpdate: 3,
   exploreFileTree: false,
@@ -60,6 +61,7 @@ export function loadConfig(): Config {
     validateLinks: process.env.VALIDATE_LINKS === 'true' || DEFAULT_CONFIG.validateLinks,
     linkValidationTimeout: safeInt(process.env.LINK_VALIDATION_TIMEOUT, DEFAULT_CONFIG.linkValidationTimeout ?? 10000),
     linkValidationConcurrency: safeInt(process.env.LINK_VALIDATION_CONCURRENCY, DEFAULT_CONFIG.linkValidationConcurrency ?? 10),
+    repoProcessingConcurrency: safeInt(process.env.REPO_PROCESSING_CONCURRENCY, DEFAULT_CONFIG.repoProcessingConcurrency ?? 5),
     proxyUrl: process.env.PROXY_URL || DEFAULT_CONFIG.proxyUrl,
     maxDaysSinceSubUpdate: safeInt(process.env.MAX_DAYS_SINCE_SUB_UPDATE, DEFAULT_CONFIG.maxDaysSinceSubUpdate ?? 3),
     exploreFileTree: process.env.EXPLORE_FILE_TREE === 'true' || DEFAULT_CONFIG.exploreFileTree,

@@ -71,7 +71,8 @@ export class SubscriptionCollector {
       });
       console.log('');
 
-      const CONCURRENCY = 5;
+      // 仓库处理并发数
+      const CONCURRENCY = this.config.repoProcessingConcurrency ?? 5;
       const processRepo = async (repo: Repository, index: number) => {
         console.log(`\n[${index + 1}/${repositories.length}] 处理: ${repo.fullName}`);
 
@@ -114,19 +115,21 @@ export class SubscriptionCollector {
         }
       };
 
-      // 并发处理
+      // 并发处理仓库
       for (let i = 0; i < repositories.length; i += CONCURRENCY) {
         const batch = repositories.slice(i, i + CONCURRENCY);
         await Promise.all(batch.map((repo, j) => processRepo(repo, i + j)));
       }
 
-      await this.aggregator.saveToFile(this.config.outputFile);
-
       let linksToUpdate = this.aggregator.getAllLinks();
       if (this.config.validateLinks && this.validator) {
         console.log('\n🔐 链接验证已启用\n');
         linksToUpdate = await this.validator.validateLinks(linksToUpdate);
+        this.aggregator.clear();
+        this.aggregator.addLinks(linksToUpdate);
       }
+
+      await this.aggregator.saveToFile(this.config.outputFile);
 
       if (this.config.configYamlPath) {
         await this.configUpdater.backupConfig();

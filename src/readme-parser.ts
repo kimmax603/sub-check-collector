@@ -191,17 +191,19 @@ export class ReadmeParser {
 
   /**
    * 规范化 URL 用于去重
-   * - 转小写
    * - 去除尾部斜杠
    * - 去除 query 参数和 fragment
+   * - host 转小写（防止同一网站大小写不同）
+   * - 路径保持原始大小写（GitHub 路径区分大小写！）
    */
   private normalizeUrl(url: string): string {
     try {
       const u = new URL(url);
-      // 只保留 pathname，去除 query 和 hash
-      return (u.origin + u.pathname).toLowerCase().replace(/\/+$/, '');
+      // 只对 host 转小写，路径保持原始大小写
+      const normalizedPath = u.pathname.replace(/\/+$/, '');
+      return `${u.protocol}//${u.host.toLowerCase()}${normalizedPath}`;
     } catch {
-      return url.toLowerCase().replace(/[?#].*$/, '').replace(/\/+$/, '');
+      return url.replace(/[?#].*$/, '').replace(/\/+$/, '');
     }
   }
 
